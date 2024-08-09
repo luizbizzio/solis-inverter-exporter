@@ -1,4 +1,4 @@
-# Solis Inverter Exporter 📈
+# Solis Inverter Exporter ☀️📈
 
 ## Overview 📊
 
@@ -68,3 +68,12 @@ This script collects and exports key metrics from Solis inverters to Prometheus.
      ```init
      http://localhost:8686/metrics
      ```
+
+## Notes 📝
+
+- **Prometheus Data Fetching:** The script continuously fetches data from the inverter and exposes it in Prometheus format. Ensure that your inverter is accessible from the script's host.
+  
+- **Configuration:** Verify that the IP address, username, and password for your inverter are correctly set. These settings are crucial for data retrieval.
+
+## License
+This project is licensed under the MIT License.
