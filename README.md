@@ -2,7 +2,7 @@
 
 ## Overview 📊
 
-This script collects and exports key metrics from Solis inverters to Prometheus. It tracks important data points such as <ins>power output</ins>, <ins>energy produced today</ins>, and <ins>total energy produced</ins>. This allows you to monitor the performance of your inverter with ease.
+This script collects and exports key metrics from Solis inverters to Prometheus. It tracks important data points such as <ins>Current Generation</ins>, <ins>Daily Generation</ins>, and <ins>Total Generation</ins>. This allows you to monitor the performance of your inverter with ease.
 
 <div align="center">
    <img src="graphic.png" alt="Graphic" width="900"/>
