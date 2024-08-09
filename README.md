@@ -30,3 +30,41 @@ This script collects and exports key metrics from Solis inverters to Prometheus.
    USERNAME = "INVERTER_USERNAME"
    PASSWORD = "INVERTER_PASSWORD"
    ```
+
+- `IP`: IP address of your Solis inverter.
+- `USERNAME`: Username for your Solis inverter.
+- `PASSWORD`: Password for your Solis inverter.
+
+2. **Exporter Port (Optional):**
+
+   Set the port for the Prometheus exporter:
+
+   ```python
+   PORT = 8686
+   ```
+
+## Usage 🚀
+
+1. **Install Dependencies:**
+
+   Install the required Python packages:
+
+   ```sh
+   pip install prometheus_client requests beautifulsoup4
+   ```
+
+   2. **Run the Script:**
+
+   Launch the script to start the Prometheus exporter:
+
+   ```sh
+   python solis_exporter.py
+   ```
+
+3. **Access Metrics:**
+
+   After running the script, you can access the metrics at:
+    
+     ```init
+     http://localhost:8686/metrics
+     ```
