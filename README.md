@@ -75,5 +75,6 @@ This script collects and exports key metrics from Solis inverters to Prometheus.
   
 - **Configuration:** Verify that the IP address, username, and password for your inverter are correctly set. These settings are crucial for data retrieval.
 
-## License
-This project is licensed under the MIT License.
+## License 📄
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
