@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 Luiz Bizzio
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 from prometheus_client import start_http_server, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from prometheus_client import CollectorRegistry, generate_latest
 from prometheus_client.exposition import start_wsgi_server
@@ -62,3 +65,4 @@ if __name__ == '__main__':
     server = make_server('', PORT, metrics_app)
     print(f"Serving metrics on port {PORT}")
     server.serve_forever()
+
