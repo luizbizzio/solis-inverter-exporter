@@ -1,83 +1,196 @@
 # Solis Inverter Exporter ☀️📈
 
-## Overview 📊
+Prometheus exporter for **Solis inverters** using the local web interface (`/status.html`).
 
-This script collects and exports key metrics from Solis inverters to Prometheus. It tracks important data points such as <ins>Current Generation</ins>, <ins>Daily Generation</ins>, and <ins>Total Generation</ins>. This allows you to monitor the performance of your inverter with ease.
+It polls the inverter on your LAN on an interval and exposes metrics on `/metrics`.  
+Prometheus scraping does **not** trigger extra requests. The exporter serves cached values until the next poll cycle.
 
-<div align="center">
-   <img src="metrics.png" alt="Metrics" width="900"/>
-</div>
+<p align="center">
+  <img src="images/metrics.png" alt="Grafana example" width="800"/>
+</p>
 
-## Features 🌟
+## Features 📊
 
-- **Metrics Collection:** Retrieves <ins>power output</ins>, <ins>energy produced today</ins>, and <ins>total energy produced</ins> from Solis inverters.
-  
-- **Prometheus Integration:** Provides metrics in a format compatible with Prometheus scraping.
-  
-- **Simple Configuration:** Easy to set up with minimal configuration required.
-  
-- **Reliable Data Fetching:** Automatically retries in case of network or data fetching errors.
+- Metrics on `/metrics`
+- Multi-inverter support
+- Parallel polling (`max_parallel`)
+- Cached values
+- Stale handling for night time offline inverters
+  - after `stale_seconds`, power is forced to `0`
+  - still keeps last energy counters
+- Extra optional info
+  - Network info as labels (SSID, IP, MAC, mode)
+  - Device info as labels (serial, versions)
+- Health and readiness endpoints
+  - `/-/healthy` (or `/healthz`)
+  - `/-/ready` (or `/readyz`)
 
-## Configuration ⚙️
+## Requirements
 
-1. **Device Configuration:**
+- Python 3.10+ (3.11 recommended)
+- Or Docker
+- LAN access to the inverter web UI
+- Inverter web credentials (basic auth)
 
-   Update the following variables with your Solis inverter details:
+## Install ⚙️
 
-   ```python
-   # Device Configuration
-   IP = "INVERTER_IP"
-   USERNAME = "INVERTER_USERNAME"
-   PASSWORD = "INVERTER_PASSWORD"
-   ```
+Before you run the exporter, edit `config.yaml` and set:
+- your inverter `host`, `username`, `password`
+- optional polling settings
 
-- `IP`: IP address of your Solis inverter.
-- `USERNAME`: Username for your Solis inverter.
-- `PASSWORD`: Password for your Solis inverter.
+## Python 🐍
 
-2. **Exporter Port (Optional):**
+Install dependencies:
 
-   Set the port for the Prometheus exporter:
+```bash
+pip install -r requirements.txt
+```
 
-   ```python
-   PORT = 8686
-   ```
+Run (it will look for `config.yaml` in the current folder):
 
-## Usage 🚀
+```bash
+python solis_inverter_exporter.py
+```
 
-1. **Install Dependencies:**
+Optional:
 
-   Install the required Python packages:
+```bash
+python solis_inverter_exporter.py --config-file /path/to/config.yaml
+```
 
-   ```sh
-   pip install prometheus_client requests beautifulsoup4
-   ```
+Test:
 
-   2. **Run the Script:**
+```bash
+curl http://localhost:8686/metrics
+```
 
-   Launch the script to start the Prometheus exporter:
+## Docker 🐳 (GHCR)
 
-   ```sh
-   python solis_exporter.py
-   ```
+The image is published to GitHub Container Registry.
 
-3. **Access Metrics:**
+Run (mount your `config.yaml`):
 
-   After running the script, you can access the metrics at:
-    
-     ```init
-     http://localhost:8686/metrics
-     ```
+```bash
+docker run -d \
+  --name solis-inverter-exporter \
+  -p 8686:8686 \
+  -v "$(pwd)/config.yaml:/config/config.yaml:ro" \
+  --restart unless-stopped \
+  ghcr.io/luizbizzio/solis-inverter-exporter:latest
+```
 
-## Notes 📝
+Test:
 
-- **Prometheus Data Fetching:** The script continuously fetches data from the inverter and exposes it in Prometheus format. Ensure that your inverter is accessible from the script's host.
-  
-- **Configuration:** Verify that the IP address, username, and password for your inverter are correctly set. These settings are crucial for data retrieval.
+```bash
+curl http://localhost:8686/metrics
+```
 
-## License 📄
+Notes:
+- If you change `server.port`, update the `-p` mapping too.
+- The container is stateless. Any config change needs a container restart.
+- The exporter reads config from `/config/config.yaml` by default inside Docker.
+
+## Configuration 🛠️
+
+Edit `config.yaml`:
+
+```yaml
+server:
+  port: 8686
+  expose_default_metrics: false
+  log_level: INFO
+
+scrape:
+  poll_interval_seconds: 30
+  timeout_seconds: 10
+  retries: 3
+  retry_backoff_seconds: 1
+  max_parallel: 4
+  stale_seconds: 300
+
+features:
+  network_info: true
+  device_info: true
+
+solis:
+  - name: inverter-1
+    host: "IP_ADDRESS"
+    username: "INVERTER_USERNAME"
+    password: "INVERTER_PASSWORD"
+    scheme: "http"
+    path: "/status.html"
+```
+
+Config notes:
+- `stale_seconds: 300` (5 minutes) is a good default for night time offline.
+- `expose_default_metrics: true` will also expose `python_*` and `process_*` metrics.
+- `features.network_info` and `features.device_info` add label-heavy metrics. Disable if you do not want SSID, MAC, IP in Prometheus.
+
+## Endpoints
+
+- Metrics: `/metrics`
+- Health: `/-/healthy` (or `/healthz`)
+- Ready: `/-/ready` (or `/readyz`)
+
+## Prometheus scrape config
+
+```yaml
+scrape_configs:
+  - job_name: "solis-inverter"
+    static_configs:
+      - targets: ["YOUR_EXPORTER_IP:8686"]
+```
+
+## Metrics
+
+Main metrics:
+
+| Name | Type | Description |
+|---|---|---|
+| `solis_inverter_up` | Gauge | 1 if last poll succeeded, else 0 |
+| `solis_inverter_power_watts` | Gauge | Current AC power (W). Forced to 0 after stale |
+| `solis_inverter_energy_today_kwh` | Gauge | Energy today (kWh) |
+| `solis_inverter_energy_total_kwh` | Gauge | Total energy (kWh) |
+| `solis_inverter_stale` | Gauge | 1 if data is stale, else 0 |
+| `solis_inverter_last_success_age_seconds` | Gauge | Seconds since last success (-1 if never) |
+| `solis_inverter_errors_total` | Counter | Total poll errors |
+| `solis_inverter_scrape_duration_seconds` | Gauge | Duration of last poll |
+| `solis_inverter_last_success_timestamp` | Gauge | Unix timestamp of last success |
+| `solis_inverter_last_attempt_timestamp` | Gauge | Unix timestamp of last attempt |
+
+Optional extra metrics (if available on your inverter page):
+- `solis_inverter_rated_power_watts`
+- `solis_inverter_uptime_seconds`
+- `solis_inverter_alarm_present`
+- `solis_remote_status_a`, `solis_remote_status_b`, `solis_remote_status_c`
+- `solis_sta_rssi_percent`
+
+Label info metrics (can be disabled in `features`):
+- `solis_inverter_network_info{inverter,wmode,ap_ssid,ap_ip,ap_mac,sta_ssid,sta_ip,sta_mac} 1`
+- `solis_inverter_device_info{inverter,sn,msvn,ssvn,pv_type,cover_mid,cover_ver} 1`
+
+## Troubleshooting 🔍
+
+If `solis_inverter_up = 0`:
+- Check IP and that the inverter web UI is reachable.
+- Confirm username and password.
+- Try opening `http://INVERTER_IP/status.html` in a browser from the same network.
+- Increase `scrape.timeout_seconds` if your inverter is slow.
+
+If power becomes `0` at night:
+- That is expected if the inverter goes offline.
+- Power is forced to `0` only after `stale_seconds` since last success.
+
+If you do not want SSID, MAC, IP in Prometheus:
+- Set `features.network_info: false`
+- Set `features.device_info: false`
+
+## Security notice ⚠️
+
+This exporter needs inverter web credentials in `config.yaml`. Treat them as secrets.
+
+Also, `network_info` can expose SSID, IP and MAC addresses as Prometheus labels. Disable it if you do not want that data stored in your monitoring system.
+
+## License
 
 This project is licensed under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
-
-Commercial use, resale, and paid services are not permitted.
-
