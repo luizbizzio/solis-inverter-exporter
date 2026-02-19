@@ -165,13 +165,24 @@ class SolisExporter:
         self._lock = threading.Lock()
         self._last_success: Dict[str, float] = {}
 
+        self._sessions: Dict[str, requests.Session] = {}
+        self._session_locks: Dict[str, threading.Lock] = {}
+
+        for inv in self.inverters:
+            self._session_locks[inv.name] = threading.Lock()
+            self._sessions[inv.name] = self._new_session(inv)
+
         self.registry = CollectorRegistry() if not self.expose_default_metrics else None
         metric_kwargs = {} if self.registry is None else {"registry": self.registry}
 
-        self.build_info = Info("solis_exporter_build_info", "Build info", **metric_kwargs)
+        self.build_info = Info("solis_inverter_exporter_build_info", "Build info", **metric_kwargs)
         self.build_info.info({"version": EXPORTER_VERSION})
 
-        self.exporter_ready = Gauge("solis_exporter_ready", "1 if exporter has completed at least one poll cycle", **metric_kwargs)
+        self.exporter_ready = Gauge(
+            "solis_inverter_exporter_ready",
+            "1 if exporter has completed at least one poll cycle",
+            **metric_kwargs,
+        )
 
         self.inverter_up = Gauge("solis_inverter_up", "1 if last poll succeeded, else 0", ["inverter"], **metric_kwargs)
         self.inverter_last_attempt = Gauge("solis_inverter_last_attempt_timestamp", "Unix timestamp of last poll attempt", ["inverter"], **metric_kwargs)
@@ -242,18 +253,39 @@ class SolisExporter:
             self.expose_default_metrics,
         )
 
+    def _new_session(self, inv: InverterConfig) -> requests.Session:
+        s = requests.Session()
+        s.trust_env = False
+        s.auth = (inv.username, inv.password)
+        s.headers.update({"User-Agent": f"solis-inverter-exporter/{EXPORTER_VERSION}"})
+        return s
+
+    def _reset_session(self, inv: InverterConfig) -> None:
+        lock = self._session_locks[inv.name]
+        with lock:
+            old = self._sessions.get(inv.name)
+            if old is not None:
+                try:
+                    old.close()
+                except Exception:
+                    pass
+            self._sessions[inv.name] = self._new_session(inv)
+
     def _request_html(self, inv: InverterConfig) -> str:
         attempts = max(1, self.retries)
         last_exc: Optional[Exception] = None
+        lock = self._session_locks[inv.name]
 
         for i in range(attempts):
             try:
-                with requests.Session() as s:
-                    r = s.get(inv.url, auth=(inv.username, inv.password), timeout=self.timeout_seconds)
-                    r.raise_for_status()
-                    return r.text
+                with lock:
+                    s = self._sessions[inv.name]
+                    r = s.get(inv.url, timeout=self.timeout_seconds)
+                r.raise_for_status()
+                return r.text
             except Exception as e:
                 last_exc = e
+                self._reset_session(inv)
                 if i < attempts - 1:
                     time.sleep(self.retry_backoff_seconds * (2 ** i))
 
@@ -272,16 +304,10 @@ class SolisExporter:
             e_total = to_float(vars_map.get("webdata_total_e"))
 
             rated = to_float(vars_map.get("webdata_rate_p"))
-            if rated is None or rated <= 0:
-                rated_val = -1.0
-            else:
-                rated_val = float(rated)
+            rated_val = float(rated) if (rated is not None and rated > 0) else -1.0
 
             uptime = to_float(vars_map.get("webdata_utime"))
-            if uptime is None or uptime <= 0:
-                uptime_val = -1.0
-            else:
-                uptime_val = float(uptime)
+            uptime_val = float(uptime) if (uptime is not None and uptime > 0) else -1.0
 
             alarm = clean_label(vars_map.get("webdata_alarm"), default="")
             alarm_val = 1.0 if alarm.strip() else 0.0
@@ -481,7 +507,7 @@ def main() -> None:
     parser.add_argument("--config-file", dest="config_file", default=None)
     args = parser.parse_args()
 
-    env_path = os.environ.get("SOLIS_EXPORTER_CONFIG")
+    env_path = os.environ.get("SOLIS_INVERTER_EXPORTER_CONFIG")
     config_path = args.config_file or env_path or DEFAULT_CONFIG_PATH
 
     SolisExporter(config_path=config_path).run()
