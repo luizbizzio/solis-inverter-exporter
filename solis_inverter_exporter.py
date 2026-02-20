@@ -167,8 +167,12 @@ class SolisExporter:
 
         self._sessions: Dict[str, requests.Session] = {}
         self._session_locks: Dict[str, threading.Lock] = {}
+        self._fail_streak: Dict[str, int] = {}
+        self._inv_by_name: Dict[str, InverterConfig] = {}
 
         for inv in self.inverters:
+            self._inv_by_name[inv.name] = inv
+            self._fail_streak[inv.name] = 0
             self._session_locks[inv.name] = threading.Lock()
             self._sessions[inv.name] = self._new_session(inv)
 
@@ -185,27 +189,107 @@ class SolisExporter:
         )
 
         self.inverter_up = Gauge("solis_inverter_up", "1 if last poll succeeded, else 0", ["inverter"], **metric_kwargs)
-        self.inverter_last_attempt = Gauge("solis_inverter_last_attempt_timestamp", "Unix timestamp of last poll attempt", ["inverter"], **metric_kwargs)
-        self.inverter_last_success = Gauge("solis_inverter_last_success_timestamp", "Unix timestamp of last successful poll", ["inverter"], **metric_kwargs)
-        self.inverter_scrape_duration = Gauge("solis_inverter_scrape_duration_seconds", "Duration of last poll in seconds", ["inverter"], **metric_kwargs)
-        self.inverter_errors_total = Counter("solis_inverter_errors_total", "Total poll errors", ["inverter"], **metric_kwargs)
+        self.inverter_last_attempt = Gauge(
+            "solis_inverter_last_attempt_timestamp",
+            "Unix timestamp of last poll attempt",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.inverter_last_success = Gauge(
+            "solis_inverter_last_success_timestamp",
+            "Unix timestamp of last successful poll",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.inverter_scrape_duration = Gauge(
+            "solis_inverter_scrape_duration_seconds",
+            "Duration of last poll in seconds",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.inverter_errors_total = Counter(
+            "solis_inverter_errors_total",
+            "Total poll errors",
+            ["inverter"],
+            **metric_kwargs,
+        )
 
-        self.inverter_stale = Gauge("solis_inverter_stale", "1 if data is stale, else 0", ["inverter"], **metric_kwargs)
-        self.inverter_last_success_age = Gauge("solis_inverter_last_success_age_seconds", "Seconds since last success (-1 if never)", ["inverter"], **metric_kwargs)
+        self.inverter_stale = Gauge(
+            "solis_inverter_stale",
+            "1 if data is stale, else 0",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.inverter_last_success_age = Gauge(
+            "solis_inverter_last_success_age_seconds",
+            "Seconds since last success (-1 if never)",
+            ["inverter"],
+            **metric_kwargs,
+        )
 
-        self.power_w = Gauge("solis_inverter_power_watts", "Current AC power output in watts", ["inverter"], **metric_kwargs)
-        self.energy_today_kwh = Gauge("solis_inverter_energy_today_kwh", "Energy produced today in kWh", ["inverter"], **metric_kwargs)
-        self.energy_total_kwh = Gauge("solis_inverter_energy_total_kwh", "Total energy produced in kWh", ["inverter"], **metric_kwargs)
+        self.power_w = Gauge(
+            "solis_inverter_power_watts",
+            "Current AC power output in watts",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.energy_today_kwh = Gauge(
+            "solis_inverter_energy_today_kwh",
+            "Energy produced today in kWh",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.energy_total_kwh = Gauge(
+            "solis_inverter_energy_total_kwh",
+            "Total energy produced in kWh",
+            ["inverter"],
+            **metric_kwargs,
+        )
 
-        self.rated_power_w = Gauge("solis_inverter_rated_power_watts", "Rated power in watts (if available, else -1)", ["inverter"], **metric_kwargs)
-        self.uptime_s = Gauge("solis_inverter_uptime_seconds", "Uptime seconds (if available, else -1)", ["inverter"], **metric_kwargs)
-        self.alarm_present = Gauge("solis_inverter_alarm_present", "1 if alarm field is not empty, else 0", ["inverter"], **metric_kwargs)
+        self.rated_power_w = Gauge(
+            "solis_inverter_rated_power_watts",
+            "Rated power in watts (if available, else -1)",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.uptime_s = Gauge(
+            "solis_inverter_uptime_seconds",
+            "Uptime seconds (if available, else -1)",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.alarm_present = Gauge(
+            "solis_inverter_alarm_present",
+            "1 if alarm field is not empty, else 0",
+            ["inverter"],
+            **metric_kwargs,
+        )
 
-        self.remote_status_a = Gauge("solis_remote_status_a", "Remote status A (1 enabled, 0 disabled, -1 unknown)", ["inverter"], **metric_kwargs)
-        self.remote_status_b = Gauge("solis_remote_status_b", "Remote status B (1 enabled, 0 disabled, -1 unknown)", ["inverter"], **metric_kwargs)
-        self.remote_status_c = Gauge("solis_remote_status_c", "Remote status C (1 enabled, 0 disabled, -1 unknown)", ["inverter"], **metric_kwargs)
+        self.remote_status_a = Gauge(
+            "solis_remote_status_a",
+            "Remote status A (1 enabled, 0 disabled, -1 unknown)",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.remote_status_b = Gauge(
+            "solis_remote_status_b",
+            "Remote status B (1 enabled, 0 disabled, -1 unknown)",
+            ["inverter"],
+            **metric_kwargs,
+        )
+        self.remote_status_c = Gauge(
+            "solis_remote_status_c",
+            "Remote status C (1 enabled, 0 disabled, -1 unknown)",
+            ["inverter"],
+            **metric_kwargs,
+        )
 
-        self.sta_rssi_percent = Gauge("solis_sta_rssi_percent", "STA RSSI percent (0..100)", ["inverter"], **metric_kwargs)
+        self.sta_rssi_percent = Gauge(
+            "solis_sta_rssi_percent",
+            "STA RSSI percent (0..100)",
+            ["inverter"],
+            **metric_kwargs,
+        )
 
         self.network_info = Gauge(
             "solis_inverter_network_info",
@@ -228,15 +312,19 @@ class SolisExporter:
             self.inverter_scrape_duration.labels(inverter=inv.name).set(0)
             self.inverter_stale.labels(inverter=inv.name).set(1)
             self.inverter_last_success_age.labels(inverter=inv.name).set(-1)
+
             self.power_w.labels(inverter=inv.name).set(0)
             self.energy_today_kwh.labels(inverter=inv.name).set(0)
             self.energy_total_kwh.labels(inverter=inv.name).set(0)
+
             self.rated_power_w.labels(inverter=inv.name).set(-1)
             self.uptime_s.labels(inverter=inv.name).set(-1)
             self.alarm_present.labels(inverter=inv.name).set(0)
+
             self.remote_status_a.labels(inverter=inv.name).set(-1)
             self.remote_status_b.labels(inverter=inv.name).set(-1)
             self.remote_status_c.labels(inverter=inv.name).set(-1)
+
             self.sta_rssi_percent.labels(inverter=inv.name).set(-1)
 
         self.exporter_ready.set(0)
@@ -252,6 +340,52 @@ class SolisExporter:
             self.stale_seconds,
             self.expose_default_metrics,
         )
+
+    def reset_state(self) -> None:
+        for inv in self.inverters:
+            self._reset_session(inv)
+
+        with self._lock:
+            self._last_success.clear()
+
+        self._ready.clear()
+        self.exporter_ready.set(0)
+
+        for inv in self.inverters:
+            self.inverter_up.labels(inverter=inv.name).set(0)
+            self.inverter_last_attempt.labels(inverter=inv.name).set(0)
+            self.inverter_last_success.labels(inverter=inv.name).set(0)
+            self.inverter_scrape_duration.labels(inverter=inv.name).set(0)
+            self.inverter_stale.labels(inverter=inv.name).set(1)
+            self.inverter_last_success_age.labels(inverter=inv.name).set(-1)
+
+            self.power_w.labels(inverter=inv.name).set(0)
+            self.energy_today_kwh.labels(inverter=inv.name).set(0)
+            self.energy_total_kwh.labels(inverter=inv.name).set(0)
+
+            self.rated_power_w.labels(inverter=inv.name).set(-1)
+            self.uptime_s.labels(inverter=inv.name).set(-1)
+            self.alarm_present.labels(inverter=inv.name).set(0)
+
+            self.remote_status_a.labels(inverter=inv.name).set(-1)
+            self.remote_status_b.labels(inverter=inv.name).set(-1)
+            self.remote_status_c.labels(inverter=inv.name).set(-1)
+
+            self.sta_rssi_percent.labels(inverter=inv.name).set(-1)
+
+            self._fail_streak[inv.name] = 0
+
+        if hasattr(self.network_info, "clear"):
+            try:
+                self.network_info.clear()
+            except Exception:
+                pass
+
+        if hasattr(self.device_info, "clear"):
+            try:
+                self.device_info.clear()
+            except Exception:
+                pass
 
     def _new_session(self, inv: InverterConfig) -> requests.Session:
         s = requests.Session()
@@ -282,7 +416,10 @@ class SolisExporter:
                     s = self._sessions[inv.name]
                     r = s.get(inv.url, timeout=self.timeout_seconds)
                 r.raise_for_status()
-                return r.text
+                html = r.text or ""
+                if "var webdata_" not in html:
+                    raise RuntimeError("unexpected_html")
+                return html
             except Exception as e:
                 last_exc = e
                 self._reset_session(inv)
@@ -298,6 +435,9 @@ class SolisExporter:
         try:
             html = self._request_html(inv)
             vars_map = parse_vars(html)
+            if not vars_map:
+                self._reset_session(inv)
+                raise RuntimeError("parse_empty")
 
             p = to_float(vars_map.get("webdata_now_p"))
             e_today = to_float(vars_map.get("webdata_today_e"))
@@ -357,11 +497,24 @@ class SolisExporter:
             dur = max(0.0, time.time() - start)
             return inv.name, ok, dur, data if ok else None
         except Exception:
+            logging.exception("scrape failed inverter=%s", inv.name)
             dur = max(0.0, time.time() - start)
             return inv.name, False, dur, None
 
     def _apply_result(self, name: str, ok: bool, duration: float, data: Optional[Dict[str, object]]) -> None:
         self.inverter_scrape_duration.labels(inverter=name).set(duration)
+
+        if ok:
+            self._fail_streak[name] = 0
+        else:
+            self._fail_streak[name] = self._fail_streak.get(name, 0) + 1
+
+        if self._fail_streak.get(name, 0) >= 5:
+            inv = self._inv_by_name.get(name)
+            if inv is not None:
+                logging.warning("auto-reset session inverter=%s streak=%s", name, self._fail_streak[name])
+                self._reset_session(inv)
+            self._fail_streak[name] = 0
 
         if ok and data:
             self.inverter_up.labels(inverter=name).set(1)
@@ -447,6 +600,7 @@ class SolisExporter:
     def poll_cycle(self) -> None:
         futures = []
         max_workers = max(1, min(self.max_parallel, len(self.inverters)))
+        any_ok = False
 
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             for inv in self.inverters:
@@ -454,11 +608,13 @@ class SolisExporter:
 
             for f in as_completed(futures):
                 name, ok, dur, data = f.result()
+                if ok:
+                    any_ok = True
                 self._apply_result(name, ok, dur, data)
 
         self._update_stale_flags()
 
-        if not self._ready.is_set():
+        if any_ok and not self._ready.is_set():
             self._ready.set()
             self.exporter_ready.set(1)
 
@@ -484,7 +640,7 @@ class SolisExporter:
                 start_response("503 Service Unavailable", [("Content-Type", "text/plain")])
                 return [b"not ready\n"]
 
-            if path == "/" or path == "/metrics":
+            if path in ("/", "/metrics"):
                 return metrics_app(environ, start_response)
 
             start_response("404 Not Found", [("Content-Type", "text/plain")])
