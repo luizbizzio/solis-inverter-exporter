@@ -36,6 +36,7 @@ class InverterConfig:
 
 class ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
     daemon_threads = True
+    allow_reuse_address = True
 
 
 def load_config(path: str) -> dict:
@@ -391,7 +392,10 @@ class SolisExporter:
         s = requests.Session()
         s.trust_env = False
         s.auth = (inv.username, inv.password)
-        s.headers.update({"User-Agent": f"solis-inverter-exporter/{EXPORTER_VERSION}"})
+        s.headers.update({
+            "User-Agent": f"solis-inverter-exporter/{EXPORTER_VERSION}",
+            "Connection": "close",
+        })
         return s
 
     def _reset_session(self, inv: InverterConfig) -> None:
@@ -409,12 +413,13 @@ class SolisExporter:
         attempts = max(1, self.retries)
         last_exc: Optional[Exception] = None
         lock = self._session_locks[inv.name]
-
+    
         for i in range(attempts):
+            r = None
             try:
                 with lock:
                     s = self._sessions[inv.name]
-                    r = s.get(inv.url, timeout=self.timeout_seconds)
+                    r = s.get(inv.url, timeout=(3, self.timeout_seconds))
                 r.raise_for_status()
                 html = r.text or ""
                 if "var webdata_" not in html:
@@ -425,7 +430,13 @@ class SolisExporter:
                 self._reset_session(inv)
                 if i < attempts - 1:
                     time.sleep(self.retry_backoff_seconds * (2 ** i))
-
+            finally:
+                if r is not None:
+                    try:
+                        r.close()
+                    except Exception:
+                        pass
+    
         raise last_exc if last_exc else RuntimeError("request_failed")
 
     def _scrape_one(self, inv: InverterConfig) -> Tuple[str, bool, float, Optional[Dict[str, object]]]:
@@ -620,7 +631,12 @@ class SolisExporter:
 
     def loop(self) -> None:
         while not self._stop.is_set():
-            self.poll_cycle()
+            try:
+                self.poll_cycle()
+            except Exception:
+                logging.exception("unexpected error in poll loop")
+                self._stop.wait(2)
+                continue
             self._stop.wait(self.poll_interval_seconds)
 
     def wsgi_app(self):
@@ -671,3 +687,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
