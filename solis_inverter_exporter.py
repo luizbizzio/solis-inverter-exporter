@@ -17,6 +17,7 @@ from prometheus_client import CollectorRegistry, Counter, Gauge, Info
 from prometheus_client.exposition import make_wsgi_app
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIServer, make_server
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 
 DEFAULT_CONFIG_PATH = "config.yaml"
@@ -391,7 +392,7 @@ class SolisExporter:
     def _new_session(self, inv: InverterConfig) -> requests.Session:
         s = requests.Session()
         s.trust_env = False
-        s.auth = (inv.username, inv.password)
+        s.auth = None
         s.headers.update({
             "User-Agent": f"solis-inverter-exporter/{EXPORTER_VERSION}",
             "Connection": "close",
@@ -419,12 +420,60 @@ class SolisExporter:
             try:
                 with lock:
                     s = self._sessions[inv.name]
+    
                     r = s.get(inv.url, timeout=(3, self.timeout_seconds))
-                r.raise_for_status()
-                html = r.text or ""
-                if "var webdata_" not in html:
-                    raise RuntimeError("unexpected_html")
-                return html
+    
+                    if r.status_code == 401:
+                        hdr = (r.headers.get("WWW-Authenticate") or "").lower()
+                        logging.warning(
+                            "401 inverter=%s url=%s www-authenticate=%s",
+                            inv.name,
+                            inv.url,
+                            hdr or "none",
+                        )
+    
+                        if r is not None:
+                            r.close()
+                            r = None
+    
+                        tried = []
+    
+                        if "digest" in hdr:
+                            tried.append(HTTPDigestAuth(inv.username, inv.password))
+                        if "basic" in hdr:
+                            tried.append(HTTPBasicAuth(inv.username, inv.password))
+    
+                        if not tried:
+                            tried = [
+                                HTTPDigestAuth(inv.username, inv.password),
+                                HTTPBasicAuth(inv.username, inv.password),
+                            ]
+    
+                        auth_ok = False
+                        for auth in tried:
+                            s.auth = auth
+                            r = s.get(inv.url, timeout=(3, self.timeout_seconds))
+                            if r.status_code < 400:
+                                auth_ok = True
+                                break
+                            if r is not None:
+                                r.close()
+                                r = None
+    
+                        if not auth_ok:
+                            s.auth = None
+                            raise requests.HTTPError(
+                                f"401 Unauthorized for url: {inv.url}"
+                            )
+    
+                    r.raise_for_status()
+                    html = r.text or ""
+    
+                    if "var webdata_" not in html:
+                        raise RuntimeError("unexpected_html")
+    
+                    return html
+    
             except Exception as e:
                 last_exc = e
                 self._reset_session(inv)
@@ -687,4 +736,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
