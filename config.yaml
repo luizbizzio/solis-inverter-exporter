@@ -1,0 +1,25 @@
+server:
+  host: "0.0.0.0"
+  port: 9121
+  expose_default_metrics: false
+  log_level: INFO
+
+scrape:
+  poll_interval_seconds: 30
+  timeout_seconds: 10
+  retries: 3
+  retry_backoff_seconds: 1
+  max_parallel: 4
+  stale_seconds: 300
+
+features:
+  network_info: true
+  device_info: true
+
+solis:
+  - name: inverter-1
+    host: "IP_ADDRESS"
+    username: "INVERTER_USERNAME"
+    password: "INVERTER_PASSWORD"
+    scheme: "http"
+    path: "/status.html"
