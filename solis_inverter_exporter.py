@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2024-2026 Luiz Bizzio
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: Apache-2.0
 
 import argparse
 import logging
@@ -21,7 +21,8 @@ from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 
 DEFAULT_CONFIG_PATH = "config.yaml"
-EXPORTER_VERSION = "1.1.1"
+EXPORTER_VERSION = "1.0.0"
+REPO_URL = "https://github.com/luizbizzio/solis-inverter-exporter"
 
 VAR_RE = re.compile(r'\bvar\s+([A-Za-z0-9_]+)\s*=\s*"([^"]*)"\s*;')
 PCT_RE = re.compile(r"(\d+(?:\.\d+)?)")
@@ -344,6 +345,9 @@ class SolisExporter:
             self.stale_seconds,
             self.expose_default_metrics,
         )
+        
+        if os.environ.get("SOLIS_EXPORTER_HIDE_STAR_HINT", "").strip().lower() not in ("1", "true", "yes", "on"):
+            logging.info("documentation and updates: %s | if this exporter helped you, consider starring the repo", REPO_URL)
 
     def reset_state(self) -> None:
         for inv in self.inverters:
