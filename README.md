@@ -1,4 +1,4 @@
-# Solis Inverter Exporter ☀️📈
+<h1 align="center">Solis Inverter Exporter</h1>
 
 Prometheus exporter for **Solis inverters** using the local web interface (`/status.html`).
 
