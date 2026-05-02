@@ -1,0 +1,9 @@
+services:
+  solis-inverter-exporter:
+    image: ghcr.io/luizbizzio/solis-inverter-exporter:latest
+    container_name: solis-inverter-exporter
+    restart: unless-stopped
+    ports:
+      - "9121:9121"
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
