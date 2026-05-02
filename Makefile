@@ -28,23 +28,23 @@ venv:
 
 install: venv
 	$(VENV)/bin/python -m pip install -U pip
-	$(VENV)/bin/pip install -r requirements.txt
+	$(VENV)/bin/python -m pip install -r requirements.txt
 
-run:
-	$(PYTHON) $(SCRIPT) --config-file $(CONFIG)
+run: install
+	$(VENV)/bin/python $(SCRIPT) --config-file $(CONFIG)
 
 docker-build:
 	docker build -t $(IMAGE):latest .
 
 docker-run:
+	test -f $(CONFIG)
 	docker rm -f $(CONTAINER) >/dev/null 2>&1 || true
 	docker run -d \
 	  --name $(CONTAINER) \
-	  -p $(PORT):$(PORT) \
+	  -p $(PORT):9121 \
 	  -v "$$(pwd)/$(CONFIG):/config/config.yaml:ro" \
 	  --restart unless-stopped \
-	  $(IMAGE):latest \
-	  --config-file /config/config.yaml
+	  $(IMAGE):latest
 
 docker-stop:
 	docker stop $(CONTAINER)
