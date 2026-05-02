@@ -1,0 +1,42 @@
+# Copy this file to config.yaml and replace the example values.
+# Do not commit your real config.yaml.
+
+server:
+  # Exporter listen address and port.
+  host: "0.0.0.0"
+  port: 9121
+
+  # Expose default Python/process metrics.
+  expose_default_metrics: false
+
+  # Log level: DEBUG, INFO, WARNING, ERROR.
+  log_level: INFO
+
+scrape:
+  # Polling interval and request timeout.
+  poll_interval_seconds: 30
+  timeout_seconds: 10
+
+  # Retry behavior for failed inverter requests.
+  retries: 3
+  retry_backoff_seconds: 1
+
+  # Parallel scraping and stale-data threshold.
+  max_parallel: 4
+  stale_seconds: 300
+
+features:
+  # Include network and device info labels in metrics.
+  network_info: true
+  device_info: true
+
+solis:
+  # Add one entry per inverter/logger.
+  - name: inverter-1
+    host: "IP_ADDRESS"
+    username: "INVERTER_USERNAME"
+    password: "INVERTER_PASSWORD"
+
+    # Usually http and /status.html for local Solis logger access.
+    scheme: "http"
+    path: "/status.html"
